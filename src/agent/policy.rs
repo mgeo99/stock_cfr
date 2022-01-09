@@ -8,7 +8,7 @@ use std::borrow::Borrow;
 
 use tch::{
     nn::{self, ModuleT, Path},
-    Scalar,
+    Scalar, Kind,
 };
 
 pub struct PolicyNetwork {
@@ -33,13 +33,13 @@ impl PolicyNetwork {
         for (i, &size) in layer_sizes.iter().skip(1).enumerate() {
             let layer_name = format!("policy_linear_{}", i + 1);
             let layer_path = &(path / layer_name);
-            let in_dim = layer_sizes[i - 1] as i64;
+            let in_dim = layer_sizes[i] as i64;
             // TODO: Handle skip connections
             let layer = nn::linear(layer_path, in_dim, size as i64, Default::default());
             layers.push(layer);
         }
 
-        let norm_shape = vec![-1, layer_sizes[layer_sizes.len() - 1] as i64];
+        let norm_shape = vec![layer_sizes[layer_sizes.len() - 1] as i64];
         let norm = nn::layer_norm(&(path / "policy_norm"), norm_shape, Default::default());
         let out_layer = nn::linear(
             &(path / "policy_linear_out"),
@@ -67,7 +67,8 @@ impl PolicyNetwork {
 
         let hidden = self.norm.forward_t(&x, train);
         let out = self.out_layer.forward_t(&hidden, train);
-        let out = out.masked_fill(action_mask, Scalar::float(-1e9));
+        let bool_mask = action_mask.not_equal(Scalar::float(1.0));
+        let out = out.masked_fill(&bool_mask, Scalar::float(-1e9));
         out.softmax(-1, tch::Kind::Float)
     }
 }

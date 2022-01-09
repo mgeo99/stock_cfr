@@ -16,18 +16,18 @@ use rand::prelude::*;
 pub struct StockEnvConfig {
     /// Range of cash amounts to start each game with
     pub cash_amount_range: Range<f32>,
-    /// Range of positions inside the environment to start each game with
-    pub tick_range: Range<usize>,
     /// The action space is divided up to buy/sell X number of shares in this range
     pub share_action_range: Range<usize>,
+    /// Max number of steps before the environment terminates
+    pub max_steps: usize,
 }
 
 impl Default for StockEnvConfig {
     fn default() -> Self {
         Self {
             cash_amount_range: 10000.0..50000.0,
-            tick_range: 0..30000,
             share_action_range: 1..10,
+            max_steps: 100,
         }
     }
 }
@@ -42,7 +42,7 @@ impl StockEnv {
     pub fn new(config: StockEnvConfig) -> Self {
         let mut all_actions = BiMap::new();
         all_actions.insert(StockAction::Hold, 0);
-        for i in config.share_action_range.clone() {
+        for i in config.share_action_range.start..=config.share_action_range.end {
             all_actions.insert(StockAction::Buy(i), all_actions.len());
             all_actions.insert(StockAction::Sell(i), all_actions.len());
         }
@@ -60,13 +60,14 @@ impl StockEnv {
 
     pub fn start(&self) -> StockState {
         let mut rng = rand::thread_rng();
+        let start_pos = rng.gen_range(0..self.ticks.len() - self.config.max_steps);
         StockState {
             all_actions: &self.all_actions,
             asset_amount: 0.0,
             cash_amount: rng.gen_range(self.config.cash_amount_range.clone()),
-            pos: rng.gen_range(self.config.tick_range.clone()),
-            shares_held: 0,
-            ticks: &self.ticks,
+            pos: 1,
+            shares_held: 0.0,
+            ticks: &self.ticks[start_pos..start_pos + self.config.max_steps],
         }
     }
 

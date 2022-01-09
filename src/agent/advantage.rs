@@ -30,13 +30,13 @@ impl AdvantageNetwork {
         for (i, &size) in layer_sizes.iter().skip(1).enumerate() {
             let layer_name = format!("adv_linear_{}", i + 1);
             let layer_path = &(path / layer_name);
-            let in_dim = layer_sizes[i - 1] as i64;
+            let in_dim = layer_sizes[i] as i64;
             // TODO: Handle skip connections
             let layer = nn::linear(layer_path, in_dim, size as i64, Default::default());
             layers.push(layer);
         }
 
-        let norm_shape = vec![-1, layer_sizes[layer_sizes.len() - 1] as i64];
+        let norm_shape = vec![layer_sizes[layer_sizes.len() - 1] as i64];
         let norm = nn::layer_norm(&(path / "adv_norm"), norm_shape, Default::default());
         let out_layer = nn::linear(
             &(path / "adv_linear_out"),

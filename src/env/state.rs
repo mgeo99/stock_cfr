@@ -3,6 +3,7 @@ use ndarray::Array1;
 
 use super::types::{StockAction, StockQuote};
 
+#[derive(Debug)]
 pub struct StockState<'a> {
     /// Original tick data for the stock
     pub ticks: &'a [StockQuote],
@@ -13,7 +14,7 @@ pub struct StockState<'a> {
     /// Amount in assets the player holds
     pub asset_amount: f32,
     /// Current number of stocks held
-    pub shares_held: usize,
+    pub shares_held: f32,
     /// All available actions in the game
     pub all_actions: &'a BiMap<StockAction, usize>,
 }
@@ -41,12 +42,13 @@ impl<'a> StockState<'a> {
             match act {
                 &StockAction::Hold => valid_actions.push(id),
                 &StockAction::Buy(shares) => {
-                    if self.ticks[self.pos].close * (shares as f32) <= self.cash_amount {
+                    let cost = self.ticks[self.pos - 1].close * (shares as f32);
+                    if cost < self.cash_amount {
                         valid_actions.push(id)
                     }
                 }
                 &StockAction::Sell(shares) => {
-                    if shares <= self.shares_held {
+                    if (shares as f32) < self.shares_held {
                         valid_actions.push(id)
                     }
                 }
@@ -66,26 +68,24 @@ impl<'a> StockState<'a> {
     }
 
     pub fn transition(&self, action_id: usize) -> StockState<'a> {
-        let mut next_shares_held = self.shares_held;
-        let mut next_cash_amount = self.cash_amount;
-        // Update the overall portfolio value
-        let mut next_asset_amount = (self.shares_held as f32) * self.ticks[self.pos + 1].close;
         // Mutate portfolio value depending on the action at the current price
-        match self.all_actions.get_by_right(&action_id).unwrap() {
-            &StockAction::Buy(shares) => {
-                let amount_spent = self.ticks[self.pos].close * shares as f32;
-                next_cash_amount -= amount_spent;
-                next_asset_amount += amount_spent;
-                next_shares_held += shares;
-            }
-            &StockAction::Hold => (),
-            &StockAction::Sell(shares) => {
-                let amount_earned = self.ticks[self.pos].close * shares as f32;
-                next_cash_amount += amount_earned;
-                next_asset_amount -= amount_earned;
-                next_shares_held -= shares;
-            }
-        }
+        let next_price = self.ticks[self.pos].close;
+        let prev_price = self.ticks[self.pos - 1].close;
+        let next_shares_held = match self.all_actions.get_by_right(&action_id).unwrap() {
+            &StockAction::Buy(shares) => shares as f32 + self.shares_held,
+            &StockAction::Hold => self.shares_held,
+            &StockAction::Sell(shares) => self.shares_held - shares as f32,
+        };
+        let next_cash_amount = match self.all_actions.get_by_right(&action_id).unwrap() {
+            &StockAction::Buy(shares) => self.cash_amount - (shares as f32 * next_price),
+            &StockAction::Hold => self.cash_amount,
+            &StockAction::Sell(shares) => self.cash_amount + (shares as f32 * next_price),
+        };
+        let next_asset_amount = next_shares_held as f32 * next_price;
+        // println!("======= Transition ======");
+        // println!("Shares: {}", next_shares_held);
+        // println!("Cash: {}", next_cash_amount);
+        // println!("Assets: {}", next_asset_amount);
         Self {
             all_actions: self.all_actions,
             asset_amount: next_asset_amount,
@@ -103,7 +103,7 @@ impl<'a> StockState<'a> {
         }
 
         // Ran out of money and have no shares to sell
-        if self.shares_held == 0 && self.cash_amount <= 0.0 {
+        if self.shares_held == 0.0 && self.cash_amount <= 0.0 {
             return true;
         }
 

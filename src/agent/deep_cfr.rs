@@ -63,10 +63,16 @@ impl Default for DeepCFRConfig {
             reinitialize_adv: true,
             num_actions: 21,
             num_traversals: 100,
-            num_iterations: 100,
+            num_iterations: 10,
             obs_tensor_size: 7,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct ActionSample {
+    pub selected: usize,
+    pub probs: Vec<f32>
 }
 
 pub struct DeepCFRAgent {
@@ -123,7 +129,7 @@ impl DeepCFRAgent {
             self.curr_iter = i;
             println!("Iteration: {}", i);
             // Run a set number of traversals through the game initializing a new state each time
-            for _ in 0..self.config.num_traversals {
+            for _ in 0..self.config.num_traversals {                
                 let init_state = env.start();
                 self.traverse_game_tree(&init_state);
             }
@@ -136,6 +142,32 @@ impl DeepCFRAgent {
 
         // Once we finish all the network iterations, train the final policy network
         self.update_policy_net();
+    }
+
+    pub fn sample_action(&self, state: &StockState) -> ActionSample {
+        let obs = self.get_obs_tensor(state);
+        let mask = self.get_mask_tensor(state);
+
+        
+        let preds = self
+                .policy
+                .forward_t(&obs, &mask, false);
+        
+        let preds: Vec<f32> = preds.view(-1).into();
+        let mut curr_best = preds[0];
+        let mut best_action = 0;
+        for i in 0..preds.len() {
+            if preds[i] > curr_best {
+                curr_best = preds[i];
+                best_action = i;
+            }
+        }
+        let valid_actions = state.get_actions();
+        assert!(valid_actions.contains(&best_action), "Action selected was not a valid action");
+        ActionSample {
+            probs: preds,
+            selected: best_action
+        }
     }
 
     #[inline]
@@ -165,7 +197,8 @@ impl DeepCFRAgent {
         if f32::try_from(&regret_sum).unwrap() > 0.0f32 {
             matched_regrets = &advantages / &regret_sum;
         } else {
-            let adv_filled = adv.masked_fill(mask, Scalar::float(-1e9));
+            let bool_mask = mask.to_kind(Kind::Bool);
+            let adv_filled = adv.masked_fill(&bool_mask, Scalar::float(-1e9));
             let best_idx = adv_filled.argmax(-1, false);
             matched_regrets = best_idx.one_hot(self.config.num_actions as i64);
         }
@@ -235,6 +268,7 @@ impl DeepCFRAgent {
     }
 
     fn update_advantage_net(&self) -> f32 {
+        println!("Updating Advantage Network...");
         let mut dataset = ReservoirDataset::new(
             &self.advantage_memory,
             self.config.device,
@@ -262,6 +296,7 @@ impl DeepCFRAgent {
     }
 
     fn update_policy_net(&self) -> f32 {
+        println!("Updating Policy Network...");
         let mut dataset = ReservoirDataset::new(
             &self.policy_memory,
             self.config.device,
