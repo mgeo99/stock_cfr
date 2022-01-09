@@ -56,6 +56,15 @@ impl<'a> StockState<'a> {
         valid_actions
     }
 
+    /// Computes a mask for all valid actions
+    pub fn get_action_mask(&self) -> Array1<f32> {
+        let mut mask = Array1::zeros([self.all_actions.len()]);
+        self.get_actions()
+            .into_iter()
+            .for_each(|i| mask[i] = 1.0f32);
+        mask
+    }
+
     pub fn transition(&self, action_id: usize) -> StockState<'a> {
         let mut next_shares_held = self.shares_held;
         let mut next_cash_amount = self.cash_amount;
@@ -99,5 +108,11 @@ impl<'a> StockState<'a> {
         }
 
         false
+    }
+
+    pub fn get_rewards(&self) -> f32 {
+        // TODO: Make this more robust (i.e., relative to the initial value)
+        let portfolio_value = self.asset_amount + self.cash_amount;
+        portfolio_value
     }
 }

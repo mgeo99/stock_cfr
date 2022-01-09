@@ -24,7 +24,7 @@ impl AdvantageNetwork {
         layers.push(nn::linear(
             &(path / "adv_linear_0"),
             in_dim,
-            layer_sizes[0],
+            layer_sizes[0] as i64,
             Default::default(),
         ));
         for (i, &size) in layer_sizes.iter().skip(1).enumerate() {
@@ -40,7 +40,7 @@ impl AdvantageNetwork {
         let norm = nn::layer_norm(&(path / "adv_norm"), norm_shape, Default::default());
         let out_layer = nn::linear(
             &(path / "adv_linear_out"),
-            layer_sizes.last().unwrap() as i64,
+            *layer_sizes.last().unwrap() as i64,
             num_actions as i64,
             Default::default(),
         );
@@ -57,13 +57,12 @@ impl AdvantageNetwork {
         action_mask: &tch::Tensor,
         train: bool,
     ) -> tch::Tensor {
-        let mut x = xs;
-        for (i, layer) in self.layers.iter().enumerate() {
-            x = &layer.forward_t(&x, train);
-            x = &x.leaky_relu();
+        let mut x = self.layers[0].forward_t(xs, train).leaky_relu();
+        for layer in self.layers.iter().skip(1) {
+            x = layer.forward_t(&x, train).leaky_relu();
         }
 
-        let hidden = self.norm.forward_t(x, train);
+        let hidden = self.norm.forward_t(&x, train);
         let out = self.out_layer.forward_t(&hidden, train);
         out * action_mask
     }

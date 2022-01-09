@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use tch::nn::{self, ModuleT, Path};
 
 /// Skip-Dense layer
+#[derive(Debug)]
 pub struct SkipDense {
     linear: nn::Linear,
 }

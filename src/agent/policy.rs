@@ -6,7 +6,10 @@
 
 use std::borrow::Borrow;
 
-use tch::nn::{self, Path, ModuleT};
+use tch::{
+    nn::{self, ModuleT, Path},
+    Scalar,
+};
 
 pub struct PolicyNetwork {
     layers: Vec<nn::Linear>,
@@ -24,7 +27,7 @@ impl PolicyNetwork {
         layers.push(nn::linear(
             &(path / "policy_linear_0"),
             in_dim,
-            layer_sizes[0],
+            layer_sizes[0] as i64,
             Default::default(),
         ));
         for (i, &size) in layer_sizes.iter().skip(1).enumerate() {
@@ -40,7 +43,7 @@ impl PolicyNetwork {
         let norm = nn::layer_norm(&(path / "policy_norm"), norm_shape, Default::default());
         let out_layer = nn::linear(
             &(path / "policy_linear_out"),
-            layer_sizes.last().unwrap() as i64,
+            *layer_sizes.last().unwrap() as i64,
             num_actions as i64,
             Default::default(),
         );
@@ -57,15 +60,14 @@ impl PolicyNetwork {
         action_mask: &tch::Tensor,
         train: bool,
     ) -> tch::Tensor {
-        let mut x = xs;
-        for (i, layer) in self.layers.iter().enumerate() {
-            x = &layer.forward_t(&x, train);
-            x = &x.leaky_relu();
+        let mut x = self.layers[0].forward_t(xs, train).leaky_relu();
+        for layer in self.layers.iter().skip(1) {
+            x = layer.forward_t(&x, train).leaky_relu();
         }
 
-        let hidden = self.norm.forward_t(x, train);
+        let hidden = self.norm.forward_t(&x, train);
         let out = self.out_layer.forward_t(&hidden, train);
-        let out = out.masked_fill(action_mask, -1e10f32);
+        let out = out.masked_fill(action_mask, Scalar::float(-1e9));
         out.softmax(-1, tch::Kind::Float)
     }
 }

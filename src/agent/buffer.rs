@@ -5,19 +5,13 @@ pub struct BufferEntry {
     /// Information state of the entry
     pub info_state: Array1<f32>,
     /// Legal actions in the current state
-    pub valid_actions: Vec<usize>,
+    pub action_mask: Array1<f32>,
     /// Current step/iteration
     pub step: usize,
     /// Buffer data associated with the entry
-    pub data: BufferData,
+    pub data: Array1<f32>,
 }
 
-pub enum BufferData {
-    /// The policy network will output action probabilities
-    ActionProbs(Array1<f32>),
-    /// The advantage network will perform regret matching and output regrets
-    Regrets(Array1<f32>),
-}
 
 pub struct ReservoirBuffer {
     /// Entries in the buffer
@@ -46,5 +40,18 @@ impl ReservoirBuffer {
         self.entries
             .choose_multiple(&mut rng, num_entries)
             .collect()
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+
+impl std::ops::Index<usize> for ReservoirBuffer {
+    type Output = BufferEntry;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.entries[index]
     }
 }

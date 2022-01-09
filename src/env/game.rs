@@ -1,29 +1,73 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, ops::Range, path::Path};
 
+use super::{
+    state::StockState,
+    types::{StockAction, StockQuote},
+};
 use bimap::BiMap;
 use chrono::NaiveDateTime;
 use parquet::{
     file::{reader::FileReader, serialized_reader::SerializedFileReader},
     record::RowAccessor,
 };
+use rand::prelude::*;
 
-use super::types::{StockQuote, StockAction};
+#[derive(Debug)]
+pub struct StockEnvConfig {
+    /// Range of cash amounts to start each game with
+    pub cash_amount_range: Range<f32>,
+    /// Range of positions inside the environment to start each game with
+    pub tick_range: Range<usize>,
+    /// The action space is divided up to buy/sell X number of shares in this range
+    pub share_action_range: Range<usize>,
+}
+
+impl Default for StockEnvConfig {
+    fn default() -> Self {
+        Self {
+            cash_amount_range: 10000.0..50000.0,
+            tick_range: 0..30000,
+            share_action_range: 1..10,
+        }
+    }
+}
 
 pub struct StockEnv {
     ticks: Vec<StockQuote>,
-    all_actions: BiMap<StockAction, usize>
+    config: StockEnvConfig,
+    all_actions: BiMap<StockAction, usize>,
 }
 
 impl StockEnv {
-    pub fn new(max_action_shares: usize) -> Self {
+    pub fn new(config: StockEnvConfig) -> Self {
         let mut all_actions = BiMap::new();
         all_actions.insert(StockAction::Hold, 0);
-        for i in 1..=max_action_shares {
+        for i in config.share_action_range.clone() {
             all_actions.insert(StockAction::Buy(i), all_actions.len());
             all_actions.insert(StockAction::Sell(i), all_actions.len());
         }
 
-        Self { ticks: vec![], all_actions }
+        Self {
+            ticks: vec![],
+            all_actions,
+            config,
+        }
+    }
+
+    pub fn num_actions(&self) -> usize {
+        self.all_actions.len()
+    }
+
+    pub fn start(&self) -> StockState {
+        let mut rng = rand::thread_rng();
+        StockState {
+            all_actions: &self.all_actions,
+            asset_amount: 0.0,
+            cash_amount: rng.gen_range(self.config.cash_amount_range.clone()),
+            pos: rng.gen_range(self.config.tick_range.clone()),
+            shares_held: 0,
+            ticks: &self.ticks,
+        }
     }
 
     pub fn load_price_data<P: AsRef<Path>>(&mut self, path: P) {
