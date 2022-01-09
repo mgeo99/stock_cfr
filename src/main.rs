@@ -1,6 +1,7 @@
 use crate::env::game::StockEnv;
 
 mod env;
+mod agent;
 
 fn main() {
     println!("Hello, world!");
